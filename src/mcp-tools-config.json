@@ -1,0 +1,30 @@
+{
+  "name": "gemini-image-generation-mcp",
+  "description": "Gemini API を使用して画像を生成し、指定したディレクトリに保存するMCPサーバー",
+  "tools": [
+    {
+      "name": "generate_image",
+      "description": "プロンプトに基づいて画像を生成し、指定されたパスに保存します。",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "画像を生成するためのテキストプロンプト。"
+          },
+          "output_directory": {
+            "type": "string",
+            "description": "画像を保存するディレクトリのパス。デフォルトは 'output/images'。",
+            "default": "output/images"
+          },
+          "file_name": {
+            "type": "string",
+            "description": "保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。",
+            "default": "generated_image"
+          }
+        },
+        "required": ["prompt"]
+      }
+    }
+  ]
+}

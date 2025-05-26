@@ -1,0 +1,31 @@
+{
+  "name": "gemini-image-generation-mcp",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "check": "npx tsc --noEmit"
+  },
+  "author": "",
+  "license": "MIT",
+  "description": "Gemini API を使用した画像生成MCPサーバー",
+  "dependencies": {
+    "@google/genai": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.5.0",
+    "imagemin": "^9.0.1",
+    "imagemin-mozjpeg": "^10.0.0",
+    "imagemin-pngquant": "^10.0.0",
+    "sharp": "^0.34.2",
+    "zod": "^3.25.28"
+  },
+  "devDependencies": {
+    "@types/imagemin": "^9.0.1",
+    "@types/imagemin-mozjpeg": "^8.0.4",
+    "@types/node": "^22.15.21",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
