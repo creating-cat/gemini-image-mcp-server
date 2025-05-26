@@ -11,6 +11,15 @@
         "resolve-library-id",
         "get-library-docs"
       ]
+    },
+    "gemini-image-generation-mcp": {
+      "command": "node",
+      "args": [
+        "~/work/mcp/gemini-image-generation-mcp/dist/index.js"
+      ],
+      "disabled": false,
+      "alwaysAllow": [],
+      "timeout": 300
     }
   }
 }
