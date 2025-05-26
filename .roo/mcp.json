@@ -15,10 +15,12 @@
     "gemini-image-generation-mcp": {
       "command": "node",
       "args": [
-        "~/work/mcp/gemini-image-generation-mcp/dist/index.js"
+        "/Users/s_fumi/work/mcp/gemini-image-generation-mcp/dist/index.js"
       ],
       "disabled": false,
-      "alwaysAllow": [],
+      "alwaysAllow": [
+        "generate_image"
+      ],
       "timeout": 300
     }
   }

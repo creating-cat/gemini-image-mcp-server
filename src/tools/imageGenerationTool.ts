@@ -1,8 +1,12 @@
 import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse, Modality } from '@google/genai';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, stat } from 'fs/promises'; // statをインポート
 import * as path from 'path';
 import { z } from "zod";
 import dotenv from 'dotenv';
+import sharp from 'sharp'; // sharpをインポート
+import imagemin from 'imagemin';
+import imageminPngquant from 'imagemin-pngquant';
+import imageminMozjpeg from 'imagemin-mozjpeg';
 
 dotenv.config(); // .env ファイルから環境変数をロード
 
@@ -23,6 +27,29 @@ export const generateImageInputSchema = z.object({
   mime_type: z.enum(['image/jpeg', 'image/png']).default('image/jpeg').describe("出力画像形式。'image/jpeg' または 'image/png'。"),
   aspect_ratio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('1:1').describe("出力画像の縦横比。")
 });
+
+// ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
+async function getUniqueFilePath(directory: string, baseName: string, extension: string): Promise<string> {
+  let counter = 0;
+  let outputPath = '';
+  while (true) {
+    const currentFileName = counter === 0 ? baseName : `${baseName} (${counter})`;
+    outputPath = path.join(directory, `${currentFileName}.${extension}`);
+    try {
+      await stat(outputPath); // ファイルが存在するかチェック
+      counter++; // 存在する場合はカウンターを増やす
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        // ファイルが存在しない場合、このパスを使用
+        break;
+      } else {
+        // その他のエラー
+        throw e;
+      }
+    }
+  }
+  return outputPath;
+}
 
 export const generateImageTool = {
   name: 'generate_image',
@@ -52,22 +79,71 @@ export const generateImageTool = {
 
       if (response.candidates && response.candidates[0]?.content?.parts) {
         let imageData: string | undefined
-        let mimeType
+        let imageMimeType: string | undefined
         for (const part of response.candidates[0].content.parts) {
           if (!imageData && part.inlineData && part.inlineData.mimeType?.startsWith('image/') && part.inlineData.data) {
             imageData = part.inlineData.data;
-            mimeType = part.inlineData.mimeType
+            imageMimeType = part.inlineData.mimeType
           }
         }
 
-        if (imageData) {
-          const outputPath = path.join(output_directory, `${file_name}.${mime_type === 'image/jpeg' ? 'jpg' : 'png'}`);
+        if (imageData && imageMimeType) {
+          const imageBuffer = Buffer.from(imageData, 'base64');
+          let processedImageBuffer: Buffer = imageBuffer;
+          const meta = await sharp(imageBuffer).metadata();
+                    
+          const extension = meta.format === 'png' ? 'png' : 'jpg';
+          const outputPath = await getUniqueFilePath(output_directory, file_name, extension);
 
-          await writeFile(outputPath, Buffer.from(imageData, 'base64'));
-
+          // 画像圧縮処理
+          // NOTE: imageMimeTypeは当てにならないので、
+          if (meta.format === 'jpeg' || meta.format === 'jpg') {
+            const resizedJpegBuffer = await sharp(imageBuffer)
+              .resize(512, 512, { fit: 'inside' })
+              .jpeg({
+                quality: 70,
+                progressive: true,
+                mozjpeg: true
+              })
+              .toBuffer();
+          
+            // さらに imagemin-mozjpeg で再圧縮
+            processedImageBuffer = Buffer.from(await imagemin.buffer(resizedJpegBuffer, {
+              plugins: [
+                imageminMozjpeg({
+                  quality: 70,  // 同等の品質設定
+                  progressive: true
+                })
+              ]
+            }));
+          
+          } else if (meta.format === 'png') {
+            const resizedPngBuffer = await sharp(imageBuffer)
+              .resize(512, 512, { fit: 'inside' })
+              .png({ compressionLevel: 9 })
+              .toBuffer();
+          
+            processedImageBuffer = Buffer.from(await imagemin.buffer(resizedPngBuffer, {
+              plugins: [
+                imageminPngquant({
+                  quality: [0.6, 0.8],
+                  speed: 1
+                })
+              ]
+            }));
+          }
+          
+          await writeFile(outputPath, processedImageBuffer);
+          
+          const originalSizeKB = (imageBuffer.length / 1024).toFixed(2);
+          const compressedSizeKB = (processedImageBuffer.length / 1024).toFixed(2);
+          
           return {
             content: [
-              { type: "text", text: `画像が ${outputPath} に生成されました。` }
+              {
+                type: "text",
+                text: `画像が ${outputPath} に生成され、圧縮されました。\n元のサイズ: ${originalSizeKB}KB, 圧縮後のサイズ: ${compressedSizeKB}KB`
+              }
             ]
           };
         } else {
