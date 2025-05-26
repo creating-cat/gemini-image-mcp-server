@@ -1,0 +1,23 @@
+# Node.js
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+
+# Generated images
+output/images/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Logs
+logs
+*.log
+
+# etc
+my_data
