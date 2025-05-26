@@ -1,4 +1,4 @@
-import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse } from '@google/genai';
+import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse, Modality } from '@google/genai';
 import { writeFile, mkdir } from 'fs/promises';
 import * as path from 'path';
 import { z } from "zod";
@@ -13,7 +13,7 @@ if (!API_KEY) {
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
-const IMAGE_GENERATION_MODEL = 'imagen-3.0-generate-002'; // サンプルコードからモデル名を取得
+const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
 // ツールの入力スキーマをzodで定義
 export const generateImageInputSchema = z.object({
@@ -41,20 +41,29 @@ export const generateImageTool = {
         aspectRatio: aspect_ratio,
       };
 
-      const response: GenerateImagesResponse = await ai.models.generateImages({
+      const response = await ai.models.generateContent({
         model: IMAGE_GENERATION_MODEL,
-        prompt: prompt,
-        config: config,
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          // temperature: 0.8, // 必要に応じて調整
+          responseModalities: [Modality.IMAGE, Modality.TEXT], // 画像とテキストのレスポンスを期待
+        }
       });
 
-      if (response.generatedImages && response.generatedImages.length > 0) {
-        const firstImage = response.generatedImages[0];
-        if (firstImage.image && firstImage.image.imageBytes) {
-          const imageBytes = firstImage.image.imageBytes;
+      if (response.candidates && response.candidates[0]?.content?.parts) {
+        let imageData: string | undefined
+        let mimeType
+        for (const part of response.candidates[0].content.parts) {
+          if (!imageData && part.inlineData && part.inlineData.mimeType?.startsWith('image/') && part.inlineData.data) {
+            imageData = part.inlineData.data;
+            mimeType = part.inlineData.mimeType
+          }
+        }
 
+        if (imageData) {
           const outputPath = path.join(output_directory, `${file_name}.${mime_type === 'image/jpeg' ? 'jpg' : 'png'}`);
 
-          await writeFile(outputPath, Buffer.from(imageBytes, 'base64'));
+          await writeFile(outputPath, Buffer.from(imageData, 'base64'));
 
           return {
             content: [
