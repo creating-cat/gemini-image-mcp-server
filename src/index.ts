@@ -13,9 +13,9 @@ const server = new McpServer({
 
 // ツールを登録
 // server.tool(generateImageTool.name, generateImageTool.input_schema.shape, generateImageTool.execute);
-server.tool(generateImageTool.name, generateImageTool.input_schema.shape, 
-async ({ prompt, output_directory, file_name, mime_type, aspect_ratio }) => {
-  let res = await generateImageTool.execute({ prompt, output_directory, file_name, mime_type, aspect_ratio })
+server.tool(generateImageTool.name, generateImageTool.input_schema.shape,
+async ({ prompt, output_directory, file_name, mime_type, aspect_ratio, input_image_paths }) => { // input_image_paths を追加
+  let res = await generateImageTool.execute({ prompt, output_directory, file_name, mime_type, aspect_ratio, input_image_paths }) // input_image_paths を渡す
   return {
     content: [{ type: "text", text: res.content[0].text }]
   };
@@ -24,7 +24,7 @@ async ({ prompt, output_directory, file_name, mime_type, aspect_ratio }) => {
 // 標準入出力でメッセージの受信と送信を開始
 const transport = new StdioServerTransport();
 server.connect(transport).then(() => {
-  console.log('MCP Server started.');
+  // console.log('MCP Server started.');
 }).catch(error => {
   console.error('MCP Server failed to start:', error);
 });

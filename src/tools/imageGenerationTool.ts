@@ -1,5 +1,5 @@
-import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse, Modality } from '@google/genai';
-import { writeFile, mkdir, stat } from 'fs/promises'; // statをインポート
+import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse, Modality, Part } from '@google/genai'; // Part をインポート (InlineDataPartを削除)
+import { writeFile, mkdir, stat, readFile } from 'fs/promises'; // stat, readFile をインポート
 import * as path from 'path';
 import { z } from "zod";
 import dotenv from 'dotenv';
@@ -19,13 +19,22 @@ if (!API_KEY) {
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
+// InlineDataPartインターフェースを定義
+export interface InlineDataPart {
+  inlineData: {
+    mimeType: string;
+    data: string; // base64 encoded string
+  };
+}
+
 // ツールの入力スキーマをzodで定義
 export const generateImageInputSchema = z.object({
-  prompt: z.string().describe('画像を生成するためのテキストプロンプト。'),
+  prompt: z.string().describe('画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。'),
   output_directory: z.string().default('output/images').describe("画像を保存するディレクトリのパス。デフォルトは 'output/images'。"),
   file_name: z.string().default('generated_image').describe("保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。"),
   mime_type: z.enum(['image/jpeg', 'image/png']).default('image/jpeg').describe("出力画像形式。'image/jpeg' または 'image/png'。"),
-  aspect_ratio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('1:1').describe("出力画像の縦横比。")
+  aspect_ratio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('1:1').describe("出力画像の縦横比。"),
+  input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。")
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -57,7 +66,44 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => {
     try {
-      const { prompt, output_directory, file_name, mime_type, aspect_ratio } = args;
+      const { prompt, output_directory, file_name, mime_type, aspect_ratio, input_image_paths } = args;
+
+      let imageParts: InlineDataPart[] = [];
+      if (input_image_paths && input_image_paths.length > 0) {
+        console.log(`Input image paths received: ${input_image_paths.join(', ')}`);
+        imageParts = await Promise.all(
+          input_image_paths.map(async (filePath) => {
+            try {
+              console.log(`Processing image file: ${filePath}`);
+              const fileBuffer = await readFile(filePath);
+              const base64Data = fileBuffer.toString('base64');
+              const extension = path.extname(filePath).toLowerCase();
+              let resolvedMimeType = 'application/octet-stream'; // デフォルト
+
+              if (extension === '.png') {
+                resolvedMimeType = 'image/png';
+              } else if (extension === '.jpg' || extension === '.jpeg') {
+                resolvedMimeType = 'image/jpeg';
+              } else if (extension === '.webp') {
+                resolvedMimeType = 'image/webp';
+              }
+              // 必要に応じて他の画像形式（例: image/gif, image/heic, image/heif）も追加
+
+              console.log(`File ${filePath} processed. MimeType: ${resolvedMimeType}`);
+              return {
+                inlineData: {
+                  data: base64Data,
+                  mimeType: resolvedMimeType,
+                },
+              };
+            } catch (error) {
+              console.error(`Error processing image file ${filePath}:`, error);
+              throw new Error(`Failed to read or process input image file: ${filePath}. ${error instanceof Error ? error.message : String(error)}`);
+            }
+          })
+        );
+        console.log(`Successfully prepared ${imageParts.length} image parts.`);
+      }
 
       // ディレクトリが存在しない場合は作成
       await mkdir(output_directory, { recursive: true });
@@ -68,9 +114,19 @@ export const generateImageTool = {
         aspectRatio: aspect_ratio,
       };
 
+      const textPart: Part = { text: prompt };
+      let allParts: Part[];
+
+      if (imageParts.length > 0) {
+        // 画像がある場合は、テキストプロンプトの後に画像パーツを配置
+        allParts = [textPart, ...imageParts];
+      } else {
+        allParts = [textPart];
+      }
+
       const response = await ai.models.generateContent({
         model: IMAGE_GENERATION_MODEL,
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: [{ role: "user", parts: allParts }], // 修正: allParts を使用
         config: {
           // temperature: 0.8, // 必要に応じて調整
           responseModalities: [Modality.IMAGE, Modality.TEXT], // 画像とテキストのレスポンスを期待
