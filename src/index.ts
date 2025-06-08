@@ -7,7 +7,7 @@ dotenv.config(); // .env ファイルから環境変数をロード
 
 const server = new McpServer({
   name: 'gemini-image-generation-mcp',
-  version: "1.0.0", // バージョンを追加
+  version: "0.0.1", // バージョンを追加
   description: 'Gemini API を使用して画像を生成し、指定したディレクトリに保存するMCPサーバー',
 });
 
