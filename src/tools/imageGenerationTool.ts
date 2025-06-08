@@ -1,4 +1,4 @@
-import { GoogleGenAI, GenerateImagesConfig, GenerateImagesResponse, Modality, Part } from '@google/genai'; // Part をインポート (InlineDataPartを削除)
+import { GoogleGenAI, Modality, Part, GenerateContentResponse, GenerationConfig } from '@google/genai'; // GenerateImagesConfig, GenerateImagesResponse を削除し、GenerateContentResponse, GenerationConfig をインポート
 import { writeFile, mkdir, stat, readFile } from 'fs/promises'; // stat, readFile をインポート
 import * as path from 'path';
 import { z } from "zod";
@@ -32,8 +32,6 @@ export const generateImageInputSchema = z.object({
   prompt: z.string().describe('画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。'),
   output_directory: z.string().default('output/images').describe("画像を保存するディレクトリのパス。デフォルトは 'output/images'。"),
   file_name: z.string().default('generated_image').describe("保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。"),
-  mime_type: z.enum(['image/jpeg', 'image/png']).default('image/jpeg').describe("出力画像形式。'image/jpeg' または 'image/png'。"),
-  aspect_ratio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('1:1').describe("出力画像の縦横比。"),
   input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。")
 });
 
@@ -66,7 +64,7 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => {
     try {
-      const { prompt, output_directory, file_name, mime_type, aspect_ratio, input_image_paths } = args;
+      const { prompt, output_directory, file_name, input_image_paths } = args;
 
       let imageParts: InlineDataPart[] = [];
       if (input_image_paths && input_image_paths.length > 0) {
@@ -108,29 +106,25 @@ export const generateImageTool = {
       // ディレクトリが存在しない場合は作成
       await mkdir(output_directory, { recursive: true });
 
-      const config: GenerateImagesConfig = {
-        numberOfImages: 1,
-        outputMimeType: mime_type,
-        aspectRatio: aspect_ratio,
-      };
-
       const textPart: Part = { text: prompt };
       let allParts: Part[];
 
       if (imageParts.length > 0) {
         // 画像がある場合は、テキストプロンプトの後に画像パーツを配置
+        // The current selection `tPart, ...im` is part of this line.
         allParts = [textPart, ...imageParts];
       } else {
         allParts = [textPart];
       }
 
-      const response = await ai.models.generateContent({
+      const response: GenerateContentResponse = await ai.models.generateContent({
         model: IMAGE_GENERATION_MODEL,
-        contents: [{ role: "user", parts: allParts }], // 修正: allParts を使用
+        contents: [{ role: "user", parts: allParts }],
         config: {
           // temperature: 0.8, // 必要に応じて調整
           responseModalities: [Modality.IMAGE, Modality.TEXT], // 画像とテキストのレスポンスを期待
-        }
+          // numberOfImages: 1, // generateContent APIでは直接この指定がない場合があるため、モデルのデフォルトや挙動に依存。必要ならAPI仕様確認。
+        } as GenerationConfig // 明示的な型アサーション（必要に応じて）
       });
 
       if (response.candidates && response.candidates[0]?.content?.parts) {
