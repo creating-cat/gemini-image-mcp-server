@@ -10,7 +10,7 @@
         "properties": {
           "prompt": {
             "type": "string",
-            "description": "画像を生成するためのテキストプロンプト。"
+            "description": "画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。"
           },
           "output_directory": {
             "type": "string",
@@ -21,6 +21,14 @@
             "type": "string",
             "description": "保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。",
             "default": "generated_image"
+          },
+          "input_image_paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "画像ファイルの絶対パス。"
+            },
+            "description": "任意。画像生成の参考にする入力画像のファイルパスのリスト。"
           }
         },
         "required": ["prompt"]
