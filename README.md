@@ -1,29 +1,33 @@
-# Gemini Image Generation MCP Server
+---
+# Gemini Image MCP Server
 
 これは、GoogleのGemini APIを使用して画像を生成し、指定されたディレクトリに保存するMCP (Model Context Protocol) サーバーです。
 テキストプロンプトに加え、オプションで入力画像を指定して、それらを参考に新しい画像を生成することができます。
 生成された画像は、ファイルサイズを削減するために圧縮処理が施されます。
 
+---
 ## 機能
 
-*   テキストプロンプトからの画像生成
-*   （オプション）入力画像を指定し、それを参考にした画像生成
-*   生成画像の自動圧縮 (JPEG, PNG)
-*   ユニークなファイル名での保存（ファイル名の衝突を回避）
-*   MCPサーバーとして動作し、標準入出力を介してツール呼び出しを受け付け
+* テキストプロンプトからの画像生成
+* （オプション）入力画像を指定し、それを参考にした画像生成
+* 生成画像の自動圧縮 (JPEG, PNG)
+* ユニークなファイル名での保存（ファイル名の衝突を回避）
+* MCPサーバーとして動作し、標準入出力を介してツール呼び出しを受け付け
 
+---
 ## 前提条件
 
-*   Node.js (v18以上推奨)
-*   Google Cloud Project と Gemini API の有効化
-*   Gemini API キー
+* Node.js (v18以上推奨)
+* Google Cloud Project と Gemini API の有効化
+* Gemini API キー
 
+---
 ## セットアップ
 
 1.  **リポジトリのクローン:**
     ```bash
-    git clone <リポジトリのURL>
-    cd gemini-image-generation-mcp
+    git clone https://github.com/creating-cat/gemini-image-mcp-server.git
+    cd gemini-image-mcp-server
     ```
 
 2.  **依存関係のインストール:**
@@ -31,34 +35,35 @@
     npm install
     ```
 
-3.  **環境変数の設定:**
-    プロジェクトのルートディレクトリに `.env` ファイルを作成し、Gemini APIキーを設定します。
+3. **コードのビルド**
+    ```bash
+    npm run build
     ```
-    GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-    ```
-    `YOUR_GEMINI_API_KEY` を実際のAPIキーに置き換えてください。
 
-## ビルド
+### Roo Codeの場合のMCPサーバー設定例
 
-TypeScriptコードをJavaScriptにコンパイルします。
-```bash
-npm run build
+```json
+{
+  "mcpServers": {
+    "gemini-image-mcp-server": {
+      "command": "node",
+      "args": [
+        "/path/to/gemini-image-mcp-server/dist/index.js"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY"
+      },
+      "disabled": false,
+      "timeout": 300
+    }
+  }
+}
 ```
-これにより `dist` ディレクトリにコンパイル済みのファイルが生成されます。
 
-## 実行
+* `YOUR_GEMINI_API_KEY`にはあなたのGemini API KEYを設定してください。
+  * `YOUR_GEMINI_API_KEY`を`${env:GEMINI_API_KEY}`とすることで環境変数から取得させることも可能です。(Roo Codeの機能)
 
-### 開発モード (ts-nodeを使用)
-```bash
-npm run dev
-```
-
-### 本番モード (ビルド後)
-```bash
-npm run start
-```
-サーバーが起動し、標準入出力を介してMCPクライアントからのリクエストを待ち受けます。
-
+---
 ## ツール: `generate_image`
 
 このMCPサーバーは `generate_image` という名前のツールを提供します。
@@ -89,49 +94,16 @@ npm run start
 ```
 エラーが発生した場合は、エラーメッセージを返します。
 
-## MCPクライアントからの呼び出し例
-
-MCPクライアント (例: `@modelcontextprotocol/sdk` を使用したクライアント) から以下のようなリクエストを送信することでツールを呼び出せます。
-
-```json
-{
-  "tool_name": "generate_image",
-  "tool_input": {
-    "prompt": "A futuristic cityscape at sunset, with flying cars and neon lights.",
-    "output_directory": "my_generated_images",
-    "file_name": "city_of_future",
-    "use_enhanced_prompt": true
-  }
-}
-```
-
-入力画像を指定する場合:
-```json
-{
-  "tool_name": "generate_image",
-  "tool_input": {
-    "prompt": "Make this cat wear a party hat.",
-    "input_image_paths": ["/path/to/my/cat_image.jpg"]
-  }
-}
-```
-
-## デバッグ方法
-
-以下を実行
-
-```
-npx @modelcontextprotocol/inspector
-```
-
-http://127.0.0.1:6274/ にアクセスしてデバッグを行う
+---
 
 ## 注意事項
 
-*   入力画像のファイルパスは、このサーバーが実行されている環境からアクセス可能な絶対パスである必要があります。
-*   生成される画像のMIMEタイプやアスペクト比は、現在Gemini APIのデフォルトに依存します。
-*   APIキーの取り扱いには十分注意してください。
+* 入力画像のファイルパスは、このサーバーが実行されている環境からアクセス可能な絶対パスである必要があります。
+* 生成される画像のMIMEタイプやアスペクト比は、Gemini APIのデフォルトに依存します。
+* APIキーの取り扱いには十分注意してください。
+* モデルに`gemini-2.0-flash-preview-image-generation`を使用しています。googleが公開をやめたりするなど、将来的に使えなくなる可能性があるかもしれません。
 
+---
 ## ライセンス
 
 MIT
