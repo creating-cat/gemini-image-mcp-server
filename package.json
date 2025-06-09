@@ -1,16 +1,37 @@
 {
   "name": "gemini-image-mcp-server",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "start": "node dist/index.js",
     "build": "tsc",
     "dev": "ts-node src/index.ts",
-    "check": "npx tsc --noEmit"
+    "check": "npx tsc --noEmit",
+    "prepare": "npm run build"
   },
-  "author": "",
+  "author": "creating-cat (https://creating-cat.com/)",
   "license": "MIT",
-  "description": "Gemini API を使用した画像生成MCPサーバー",
+  "description": "An MCP server for image generation using the Gemini API.",
+  "keywords": [
+    "gemini",
+    "image-generation",
+    "mcp",
+    "google-ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/creating-cat/gemini-image-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/creating-cat/gemini-image-mcp-server/issues"
+  },
+  "homepage": "https://github.com/creating-cat/gemini-image-mcp-server#readme",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "dependencies": {
     "@google/genai": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.12.0",
