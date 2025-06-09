@@ -1,5 +1,5 @@
 {
-  "name": "gemini-image-generation-mcp",
+  "name": "gemini-image-mcp-server",
   "version": "0.0.1",
   "main": "dist/index.js",
   "scripts": {
