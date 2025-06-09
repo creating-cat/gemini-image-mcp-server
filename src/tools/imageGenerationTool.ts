@@ -20,34 +20,34 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
 const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
 // 入力画像がある場合のプロンプトテンプレート
-const ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES = `あなたはプロの画像生成AIです。以下のステップに従い、最高の画像を生成してください。
+const ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES = `You are a professional image generation AI. Follow the steps below to generate the best possible image.
 
-ステップ1：入力画像の分析（入力画像が存在する場合）
-各入力画像について、主要な特徴（例：被写体、スタイル、雰囲気、構図、色調、モチーフなど）を詳細に分析し、整理します。
+Step 1: Analyze Input Images (if any)
+For each input image, thoroughly analyze and organize its key features (e.g., subject, style, mood, composition, color tone, motifs).
 
-ステップ2：ユーザープロンプトとの統合計画
-ステップ1で分析した入力画像の特徴と、下記の「ユーザープロンプト」の内容を深く理解します。そして、ユーザーの意図を最大限に実現するために、入力画像のどの要素を、どのように新しい画像へ創造的に組み込むか計画を立てます。
+Step 2: Plan Integration with User Prompt
+Deeply understand the analyzed features of the input images from Step 1 and the content of the "User Prompt" below. Then, plan how to creatively incorporate which elements of the input images into the new image to best realize the user's intent.
 
-ステップ3：高品質な画像の生成
-上記の計画に基づき、ユーザープロンプトの指示を忠実に反映し、かつ入力画像の要素を効果的に活用した、高品質な画像を生成します。
+Step 3: Generate High-Quality Image
+Based on the plan above, generate a high-quality image that faithfully reflects the instructions in the user prompt and effectively utilizes the elements of the input images.
 
---- ユーザープロンプト ---
+--- User Prompt ---
 {{USER_PROMPT}}
---- ユーザープロンプトここまで ---
+--- User Prompt End ---
 `;
 
 // 入力画像がない場合のプロンプトテンプレート
-const ASSISTANT_PROMPT_TEMPLATE_NO_IMAGES = `あなたはプロの画像生成AIです。以下のステップに従い、最高の画像を生成してください。
+const ASSISTANT_PROMPT_TEMPLATE_NO_IMAGES = `You are a professional image generation AI. Follow the steps below to generate the best possible image.
 
-ステップ1：ユーザープロンプトの理解
-下記の「ユーザープロンプト」の内容を深く理解し、どのような画像を生成すべきか明確にします。
+Step 1: Understand User Prompt
+Deeply understand the content of the "User Prompt" below and clarify what kind of image should be generated.
 
-ステップ2：高品質な画像の生成
-上記の理解に基づき、ユーザープロンプトの指示を忠実に反映した、高品質な画像を生成します。
+Step 2: Generate High-Quality Image
+Based on the understanding above, generate a high-quality image that faithfully reflects the instructions in the user prompt.
 
---- ユーザープロンプト ---
+--- User Prompt ---
 {{USER_PROMPT}}
---- ユーザープロンプトここまで ---
+--- User Prompt End ---
 `;
 
 // InlineDataPartインターフェースを定義
