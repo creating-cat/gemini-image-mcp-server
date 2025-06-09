@@ -19,6 +19,37 @@ if (!API_KEY) {
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
+// 入力画像がある場合のプロンプトテンプレート
+const ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES = `あなたはプロの画像生成AIです。以下のステップに従い、最高の画像を生成してください。
+
+ステップ1：入力画像の分析（入力画像が存在する場合）
+各入力画像について、主要な特徴（例：被写体、スタイル、雰囲気、構図、色調、モチーフなど）を詳細に分析し、整理します。
+
+ステップ2：ユーザープロンプトとの統合計画
+ステップ1で分析した入力画像の特徴と、下記の「ユーザープロンプト」の内容を深く理解します。そして、ユーザーの意図を最大限に実現するために、入力画像のどの要素を、どのように新しい画像へ創造的に組み込むか計画を立てます。
+
+ステップ3：高品質な画像の生成
+上記の計画に基づき、ユーザープロンプトの指示を忠実に反映し、かつ入力画像の要素を効果的に活用した、高品質な画像を生成します。
+
+--- ユーザープロンプト ---
+{{USER_PROMPT}}
+--- ユーザープロンプトここまで ---
+`;
+
+// 入力画像がない場合のプロンプトテンプレート
+const ASSISTANT_PROMPT_TEMPLATE_NO_IMAGES = `あなたはプロの画像生成AIです。以下のステップに従い、最高の画像を生成してください。
+
+ステップ1：ユーザープロンプトの理解
+下記の「ユーザープロンプト」の内容を深く理解し、どのような画像を生成すべきか明確にします。
+
+ステップ2：高品質な画像の生成
+上記の理解に基づき、ユーザープロンプトの指示を忠実に反映した、高品質な画像を生成します。
+
+--- ユーザープロンプト ---
+{{USER_PROMPT}}
+--- ユーザープロンプトここまで ---
+`;
+
 // InlineDataPartインターフェースを定義
 export interface InlineDataPart {
   inlineData: {
@@ -32,7 +63,8 @@ export const generateImageInputSchema = z.object({
   prompt: z.string().describe('画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。プロンプトは英語推奨'),
   output_directory: z.string().default('output/images').describe("画像を保存するディレクトリのパス。デフォルトは 'output/images'。"),
   file_name: z.string().default('generated_image').describe("保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。"),
-  input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。")
+  input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。"),
+  use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。")
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -64,7 +96,7 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => {
     try {
-      const { prompt, output_directory, file_name, input_image_paths } = args;
+      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt } = args;
 
       let imageParts: InlineDataPart[] = [];
       if (input_image_paths && input_image_paths.length > 0) {
@@ -106,7 +138,20 @@ export const generateImageTool = {
       // ディレクトリが存在しない場合は作成
       await mkdir(output_directory, { recursive: true });
 
-      const textPart: Part = { text: prompt };
+      let processedPrompt: string;
+      if (use_enhanced_prompt) {
+        let selectedPromptTemplate: string;
+        if (imageParts.length > 0) {
+          selectedPromptTemplate = ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES;
+        } else {
+          selectedPromptTemplate = ASSISTANT_PROMPT_TEMPLATE_NO_IMAGES;
+        }
+        processedPrompt = selectedPromptTemplate.replace('{{USER_PROMPT}}', prompt);
+      } else {
+        processedPrompt = prompt;
+      }
+
+      const textPart: Part = { text: processedPrompt };
       let allParts: Part[];
 
       if (imageParts.length > 0) {
