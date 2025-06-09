@@ -4,8 +4,8 @@ import * as path from 'path';
 import { z } from "zod";
 import dotenv from 'dotenv';
 import sharp from 'sharp'; // sharpをインポート
-import imagemin from 'imagemin';
-import imageminPngquant from 'imagemin-pngquant';
+import imagemin from 'imagemin'; // imagemin のインポートは imagemin-optipng の前に配置することが推奨される場合があります
+import imageminOptipng from 'imagemin-optipng'; // imagemin-pngquant から imagemin-optipng に変更
 import imageminMozjpeg from 'imagemin-mozjpeg';
 
 dotenv.config(); // .env ファイルから環境変数をロード
@@ -220,9 +220,8 @@ export const generateImageTool = {
           
             processedImageBuffer = Buffer.from(await imagemin.buffer(resizedPngBuffer, {
               plugins: [
-                imageminPngquant({
-                  quality: [0.6, 0.8],
-                  speed: 1
+                imageminOptipng({ // imageminPngquant から imageminOptipng に変更
+                  optimizationLevel: 2 // OptiPNG の圧縮レベル (0-7, デフォルトは2)
                 })
               ]
             }));
