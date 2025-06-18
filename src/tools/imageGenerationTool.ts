@@ -19,6 +19,15 @@ if (!API_KEY) {
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 
+// 定数定義
+const DEFAULT_OUTPUT_DIRECTORY = 'output/images';
+const DEFAULT_FILE_NAME = 'generated_image';
+const IMAGE_RESIZE_WIDTH = 512;
+const IMAGE_RESIZE_HEIGHT = 512;
+const JPEG_QUALITY = 70;
+const PNG_COMPRESSION_LEVEL = 9;
+const OPTIPNG_OPTIMIZATION_LEVEL = 2;
+
 // 入力画像がある場合のプロンプトテンプレート
 const ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES = `You are a professional image generation AI. Follow the steps below to generate the best possible image.
 
@@ -61,10 +70,11 @@ export interface InlineDataPart {
 // ツールの入力スキーマをzodで定義
 export const generateImageInputSchema = z.object({
   prompt: z.string().describe('画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。プロンプトは英語推奨'),
-  output_directory: z.string().default('output/images').describe("画像を保存するディレクトリのパス。デフォルトは 'output/images'。"),
-  file_name: z.string().default('generated_image').describe("保存する画像ファイルの名前（拡張子なし）。デフォルトは 'generated_image'。"),
+  output_directory: z.string().default(DEFAULT_OUTPUT_DIRECTORY).describe(`画像を保存するディレクトリのパス。デフォルトは '${DEFAULT_OUTPUT_DIRECTORY}'。`),
+  file_name: z.string().default(DEFAULT_FILE_NAME).describe(`保存する画像ファイルの名前（拡張子なし）。デフォルトは '${DEFAULT_FILE_NAME}'。`),
   input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。"),
-  use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。")
+  use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。"),
+  force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。")
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -83,11 +93,58 @@ async function getUniqueFilePath(directory: string, baseName: string, extension:
         break;
       } else {
         // その他のエラー
-        throw e;
+        throw new Error(`Failed to check file path ${outputPath}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
   return outputPath;
+}
+
+// 画像処理と圧縮を行うヘルパー関数
+async function processAndCompressImage(
+  imageBuffer: Buffer,
+  originalFormat: string | undefined,
+  forceJpeg: boolean
+): Promise<{ processedBuffer: Buffer; extension: 'jpg' | 'png' }> {
+  let processedImageBuffer: Buffer;
+  let extension: 'jpg' | 'png';
+
+  if (forceJpeg || originalFormat?.toLowerCase() === 'jpeg' || originalFormat?.toLowerCase() === 'jpg') {
+    extension = 'jpg';
+    // sharpでJPEGに変換・リサイズ (forceJpegがtrueの場合、元がPNGでもここにくる)
+    const resizedJpegBuffer = await sharp(imageBuffer)
+      .resize(IMAGE_RESIZE_WIDTH, IMAGE_RESIZE_HEIGHT, { fit: 'inside' })
+      .jpeg({
+        quality: JPEG_QUALITY,
+        progressive: true,
+        mozjpeg: true
+      })
+      .toBuffer();
+
+    // imageminMozjpegで圧縮
+    processedImageBuffer = Buffer.from(await imagemin.buffer(resizedJpegBuffer, {
+      plugins: [
+        imageminMozjpeg({
+          quality: JPEG_QUALITY,
+          progressive: true
+        })
+      ]
+    }));
+  } else { // forceJpegがfalseで、かつ元がPNG (またはその他でJPEGではない) の場合
+    extension = 'png';
+    // sharpでPNGにリサイズ・圧縮
+    const resizedPngBuffer = await sharp(imageBuffer)
+      .resize(IMAGE_RESIZE_WIDTH, IMAGE_RESIZE_HEIGHT, { fit: 'inside' })
+      .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
+      .toBuffer();
+
+    processedImageBuffer = Buffer.from(await imagemin.buffer(resizedPngBuffer, {
+      plugins: [
+        imageminOptipng({ optimizationLevel: OPTIPNG_OPTIMIZATION_LEVEL })
+      ]
+    }));
+  }
+  return { processedBuffer: processedImageBuffer, extension };
 }
 
 export const generateImageTool = {
@@ -96,7 +153,7 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => {
     try {
-      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt } = args;
+      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion } = args;
 
       let imageParts: InlineDataPart[] = [];
       if (input_image_paths && input_image_paths.length > 0) {
@@ -176,75 +233,50 @@ export const generateImageTool = {
         let imageData: string | undefined
         let imageMimeType: string | undefined
         for (const part of response.candidates[0].content.parts) {
-          if (!imageData && part.inlineData && part.inlineData.mimeType?.startsWith('image/') && part.inlineData.data) {
+          if (part.inlineData && part.inlineData.mimeType?.startsWith('image/') && part.inlineData.data) {
             imageData = part.inlineData.data;
             imageMimeType = part.inlineData.mimeType
+            break; // 最初の画像部分が見つかったらループを抜ける
           }
         }
 
-        if (imageData && imageMimeType) {
+        if (imageData && imageMimeType) { // imageMimeTypeもチェック対象に加える
           const imageBuffer = Buffer.from(imageData, 'base64');
-          let processedImageBuffer: Buffer = imageBuffer;
           const meta = await sharp(imageBuffer).metadata();
-                    
-          const extension = meta.format === 'png' ? 'png' : 'jpg';
-          const outputPath = await getUniqueFilePath(output_directory, file_name, extension);
 
-          // 画像圧縮処理
-          // NOTE: imageMimeTypeは当てにならないので、
-          if (meta.format === 'jpeg' || meta.format === 'jpg') {
-            const resizedJpegBuffer = await sharp(imageBuffer)
-              .resize(512, 512, { fit: 'inside' })
-              .jpeg({
-                quality: 70,
-                progressive: true,
-                mozjpeg: true
-              })
-              .toBuffer();
-          
-            // さらに imagemin-mozjpeg で再圧縮
-            processedImageBuffer = Buffer.from(await imagemin.buffer(resizedJpegBuffer, {
-              plugins: [
-                imageminMozjpeg({
-                  quality: 70,  // 同等の品質設定
-                  progressive: true
-                })
-              ]
-            }));
-          
-          } else if (meta.format === 'png') {
-            const resizedPngBuffer = await sharp(imageBuffer)
-              .resize(512, 512, { fit: 'inside' })
-              .png({ compressionLevel: 9 })
-              .toBuffer();
-          
-            processedImageBuffer = Buffer.from(await imagemin.buffer(resizedPngBuffer, {
-              plugins: [
-                imageminOptipng({ // imageminPngquant から imageminOptipng に変更
-                  optimizationLevel: 2 // OptiPNG の圧縮レベル (0-7, デフォルトは2)
-                })
-              ]
-            }));
-          }
-          
+          const { processedBuffer: processedImageBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion);
+
+          const outputPath = await getUniqueFilePath(output_directory, file_name, extension);
           await writeFile(outputPath, processedImageBuffer);
           
           const originalSizeKB = (imageBuffer.length / 1024).toFixed(2);
           const compressedSizeKB = (processedImageBuffer.length / 1024).toFixed(2);
+
+          let message = `画像が ${outputPath} に生成され、圧縮されました。`;
+          // force_jpeg_conversionがtrueで、かつ元のAPIレスポンスのMIMEタイプがPNGだった場合にメッセージを変更
+          if (force_jpeg_conversion && imageMimeType === 'image/png') {
+            message = `画像が ${outputPath} に生成され、JPEGに変換後圧縮されました。`;
+          }
           
           return {
             content: [
               {
                 type: "text",
-                text: `画像が ${outputPath} に生成され、圧縮されました。\n元のサイズ: ${originalSizeKB}KB, 圧縮後のサイズ: ${compressedSizeKB}KB`
+                text: `${message}\n元のサイズ: ${originalSizeKB}KB, 圧縮後のサイズ: ${compressedSizeKB}KB`
               }
             ]
           };
         } else {
-          throw new Error('画像データがレスポンスから取得できませんでした。');
+          const detail = response.candidates[0]?.content?.parts?.map(p => p.text || p.inlineData?.mimeType || 'unknown_part').join(', ');
+          throw new Error(`レスポンスから有効な画像データが見つかりませんでした。受け取ったパーツ: [${detail || 'なし'}]`);
         }
       } else {
-        throw new Error('No image was generated. The response might be empty or in an unexpected format. This could be due to safety filters or an issue with the prompt.');
+        let errorMessage = '画像が生成されませんでした。レスポンスが空か、予期しない形式である可能性があります。';
+        if (response.promptFeedback) {
+          errorMessage += ` プロンプトフィードバック: ${JSON.stringify(response.promptFeedback)}`;
+        }
+        // response.candidates[0]?.finishReason や safetyRatings もログやエラーメッセージに含めると有益です。
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
       console.error('画像生成エラー:', error);

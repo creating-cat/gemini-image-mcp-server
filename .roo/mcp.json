@@ -12,10 +12,10 @@
         "get-library-docs"
       ]
     },
-    "gemini-image-generation-mcp": {
+    "gemini-image-mcp-server": {
       "command": "node",
       "args": [
-        "/Users/s_fumi/work/mcp/gemini-image-generation-mcp/dist/index.js"
+        "/Users/s_fumi/work/mcp/gemini-image-mcp-server/dist/index.js"
       ],
       "disabled": false,
       "alwaysAllow": [
