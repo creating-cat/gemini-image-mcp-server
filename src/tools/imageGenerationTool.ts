@@ -22,8 +22,7 @@ const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 // 定数定義
 const DEFAULT_OUTPUT_DIRECTORY = 'output/images';
 const DEFAULT_FILE_NAME = 'generated_image';
-const IMAGE_RESIZE_WIDTH = 512;
-const IMAGE_RESIZE_HEIGHT = 512;
+const DEFAULT_TARGET_IMAGE_MAX_SIZE = 512;
 const JPEG_QUALITY = 70;
 const PNG_COMPRESSION_LEVEL = 9;
 const OPTIPNG_OPTIMIZATION_LEVEL = 2;
@@ -74,7 +73,8 @@ export const generateImageInputSchema = z.object({
   file_name: z.string().default(DEFAULT_FILE_NAME).describe(`保存する画像ファイルの名前（拡張子なし）。デフォルトは '${DEFAULT_FILE_NAME}'。`),
   input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。"),
   use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。"),
-  force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。")
+  force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。"),
+  target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。デフォルトは ${DEFAULT_TARGET_IMAGE_MAX_SIZE}。`)
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -104,7 +104,8 @@ async function getUniqueFilePath(directory: string, baseName: string, extension:
 async function processAndCompressImage(
   imageBuffer: Buffer,
   originalFormat: string | undefined,
-  forceJpeg: boolean
+  forceJpeg: boolean,
+  targetImageMaxSize: number
 ): Promise<{ processedBuffer: Buffer; extension: 'jpg' | 'png' }> {
   let processedImageBuffer: Buffer;
   let extension: 'jpg' | 'png';
@@ -113,7 +114,7 @@ async function processAndCompressImage(
     extension = 'jpg';
     // sharpでJPEGに変換・リサイズ (forceJpegがtrueの場合、元がPNGでもここにくる)
     const resizedJpegBuffer = await sharp(imageBuffer)
-      .resize(IMAGE_RESIZE_WIDTH, IMAGE_RESIZE_HEIGHT, { fit: 'inside' })
+      .resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' })
       .jpeg({
         quality: JPEG_QUALITY,
         progressive: true,
@@ -134,7 +135,7 @@ async function processAndCompressImage(
     extension = 'png';
     // sharpでPNGにリサイズ・圧縮
     const resizedPngBuffer = await sharp(imageBuffer)
-      .resize(IMAGE_RESIZE_WIDTH, IMAGE_RESIZE_HEIGHT, { fit: 'inside' })
+      .resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' })
       .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
       .toBuffer();
 
@@ -153,7 +154,7 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => {
     try {
-      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion } = args;
+      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size } = args;
 
       let imageParts: InlineDataPart[] = [];
       if (input_image_paths && input_image_paths.length > 0) {
@@ -244,7 +245,7 @@ export const generateImageTool = {
           const imageBuffer = Buffer.from(imageData, 'base64');
           const meta = await sharp(imageBuffer).metadata();
 
-          const { processedBuffer: processedImageBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion);
+          const { processedBuffer: processedImageBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size);
 
           const outputPath = await getUniqueFilePath(output_directory, file_name, extension);
           await writeFile(outputPath, processedImageBuffer);

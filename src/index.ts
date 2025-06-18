@@ -14,8 +14,8 @@ const server = new McpServer({
 // ツールを登録
 // server.tool(generateImageTool.name, generateImageTool.input_schema.shape, generateImageTool.execute);
 server.tool(generateImageTool.name, generateImageTool.input_schema.shape,
-async ({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion }) => { // use_enhanced_prompt を追加
-  let res = await generateImageTool.execute({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion }) // use_enhanced_prompt を渡す
+async ({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size }) => { // use_enhanced_prompt を追加
+  let res = await generateImageTool.execute({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size }) // use_enhanced_prompt を渡す
   return {
     content: [{ type: "text", text: res.content[0].text }]
   };
