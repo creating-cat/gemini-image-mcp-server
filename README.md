@@ -1,46 +1,53 @@
----
+[日本語版はこちら (Read in Japanese)](./README.ja.md)
+
 # Gemini Image MCP Server
 
-これは、GoogleのGemini APIを使用して画像を生成し、指定されたディレクトリに保存するMCP (Model Context Protocol) サーバーです。
-テキストプロンプトに加え、オプションで入力画像を指定して、それらを参考に新しい画像を生成することができます。
-生成された画像は、ファイルサイズを削減するために圧縮処理が施されます。
+This is an MCP (Model Context Protocol) server that uses Google's Gemini API to generate images and save them to a specified directory.
+In addition to text prompts, you can optionally provide input images to guide the image generation process.
+Generated images are automatically compressed to reduce file size.
 
 ---
-## 機能
 
-* テキストプロンプトからの画像生成
-* （オプション）入力画像を指定し、それを参考にした画像生成
-* 生成画像の自動圧縮 (JPEG, PNG)
-* ユニークなファイル名での保存（ファイル名の衝突を回避）
-* MCPサーバーとして動作し、標準入出力を介してツール呼び出しを受け付け
+## Features
 
----
-## 前提条件
-
-* Node.js (v18以上推奨)
-* Google Cloud Project と Gemini API の有効化
-* Gemini API キー
+* Image generation from text prompts
+* (Optional) Image generation using input reference images
+* Automatic compression of generated images (JPEG, PNG)
+* Unique file name assignment to prevent file name conflicts
+* Operates as an MCP server, accepting tool calls via standard input/output
 
 ---
-## セットアップ
 
-1.  **リポジトリのクローン:**
-    ```bash
-    git clone https://github.com/creating-cat/gemini-image-mcp-server.git
-    cd gemini-image-mcp-server
-    ```
+## Prerequisites
 
-2.  **依存関係のインストール:**
-    ```bash
-    npm install
-    ```
+* Node.js (v18 or higher recommended)
+* Google Cloud Project with Gemini API enabled
+* Gemini API Key
 
-3. **コードのビルド**
-    ```bash
-    npm run build
-    ```
+---
 
-### Roo Codeの場合のMCPサーバー設定例
+## Setup
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/creating-cat/gemini-image-mcp-server.git
+   cd gemini-image-mcp-server
+   ```
+
+2. **Install dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+3. **Build the code:**
+
+   ```bash
+   npm run build
+   ```
+
+### Example MCP server configuration for Roo Code
 
 ```json
 {
@@ -60,50 +67,61 @@
 }
 ```
 
-* `YOUR_GEMINI_API_KEY`にはあなたのGemini API KEYを設定してください。
-  * `YOUR_GEMINI_API_KEY`を`${env:GEMINI_API_KEY}`とすることで環境変数から取得させることも可能です。(Roo Codeの機能)
+* Replace `YOUR_GEMINI_API_KEY` with your actual Gemini API Key.
+
+  * You can also use `${env:GEMINI_API_KEY}` to retrieve the key from environment variables (Roo Code feature).
 
 ---
-## ツール: `generate_image`
 
-このMCPサーバーは `generate_image` という名前のツールを提供します。
+## Tool: `generate_image`
 
-### 入力パラメータ
+This MCP server provides a tool named `generate_image`.
 
-| パラメータ名            | 型                | 説明                                                                                                | デフォルト値        | 必須 |
-| ----------------------- | ----------------- | --------------------------------------------------------------------------------------------------- | ------------------- | ---- |
-| `prompt`                | `string`          | 画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。プロンプトは英語推奨。 | なし                | はい |
-| `output_directory`      | `string`          | 画像を保存するディレクトリのパス。                                                                      | `output/images`     | いいえ |
-| `file_name`             | `string`          | 保存する画像ファイルの名前（拡張子なし）。                                                                | `generated_image`   | いいえ |
-| `input_image_paths`     | `string[]`        | (任意) 画像生成の参考にする入力画像のファイルパスのリスト。                                                       | `[]` (空の配列)     | いいえ |
-| `use_enhanced_prompt` | `boolean`         | (任意) AIへの指示を補助する強化プロンプトを使用するかどうか。                                                   | `true`              | いいえ |
+### Input Parameters
 
-### 出力
+| Parameter Name                  | Description                                                                                                                                                                          | Default Value      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
+| `prompt`                        | (string, required) Text prompt for image generation. If input images are provided, include instructions on how to incorporate them into the generated image. English is recommended. | None               |
+| `output_directory`              | (string, optional) Directory path where the generated image will be saved.                                                                                                           | `output/images`    |
+| `file_name`                     | (string, optional) Name of the saved image file (without extension).                                                                                                                 | `generated_image`  |
+| `input_image_paths`             | (string\[], optional) List of file paths for input reference images.                                                                                                                 | `[]` (empty array) |
+| `use_enhanced_prompt`           | (boolean, optional) Whether to use enhanced prompts to assist AI instructions.                                                                                                       | `true`             |
+| `force_jpeg_conversion`         | (boolean, optional) Whether to convert generated PNG images to JPEG for compression. If enabled, transparency will be lost, but file size will be reduced.                           | `false`            |
+| `target_image_max_size`         | (number, optional) Maximum size (in pixels) for the longer edge after resizing. The aspect ratio is preserved.                                                                       | `512`              |
+| `skip_compression_and_resizing` | (boolean, optional) Whether to skip compression and resizing of generated images. If `true`, `force_jpeg_conversion` and `target_image_max_size` will be ignored.                    | `false`            |
+| `jpeg_quality`                  | (number, optional) JPEG quality (0-100). Lower values result in higher compression.                                                                                                  | `80`               |
+| `png_compression_level`         | (number, optional) PNG compression level (0-9). Higher values result in higher compression.                                                                                          | `9`                |
+| `optipng_optimization_level`    | (number, optional) OptiPNG optimization level (0-7). Higher values result in higher compression.                                                                                     | `2`                |
 
-成功した場合、生成され圧縮された画像の保存パスと、元のサイズおよび圧縮後のサイズ情報を含むテキストメッセージを返します。
-例:
+### Output
+
+On success, the server returns the save path of the generated image and a message detailing the process, including the original and compressed file sizes.
+Example:
+
 ```json
 {
   "content": [
     {
       "type": "text",
-      "text": "画像が output/images/generated_image.jpg に生成され、圧縮されました。\n元のサイズ: XXX.XXKB, 圧縮後のサイズ: YYY.YYKB"
+      "text": "Image successfully generated and compressed at output/images/my_cat.jpg.\nOriginal size: 1024.12KB, Final size: 150.45KB"
     }
   ]
 }
 ```
-エラーが発生した場合は、エラーメッセージを返します。
+
+If an error occurs, an error message will be returned.
 
 ---
 
-## 注意事項
+## Notes
 
-* 入力画像のファイルパスは、このサーバーが実行されている環境からアクセス可能な絶対パスである必要があります。
-* 生成される画像のMIMEタイプやアスペクト比は、Gemini APIのデフォルトに依存します。
-* APIキーの取り扱いには十分注意してください。
-* モデルに`gemini-2.0-flash-preview-image-generation`を使用しています。googleが公開をやめたりするなど、将来的に使えなくなる可能性があるかもしれません。
+* The MIME type and aspect ratio of the generated images depend on the default settings of the Gemini API.
+* Handle your API key with care.
+* This server uses the model `gemini-2.0-flash-preview-image-generation`. Google may discontinue this model in the future.
 
 ---
-## ライセンス
+
+## License
 
 MIT
+
