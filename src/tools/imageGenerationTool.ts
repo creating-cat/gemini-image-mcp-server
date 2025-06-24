@@ -172,7 +172,7 @@ async function processAndCompressImage(
 
 export const generateImageTool = {
   name: 'generate_image',
-  description: 'プロンプトに基づいて画像を生成し、指定されたパスに保存します。',
+  description: 'Generates an image based on a prompt and saves it to the specified path.',
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => { // skip_compression_and_resizing を追加
     try {
@@ -297,7 +297,7 @@ export const generateImageTool = {
             }
             finalImageBuffer = imageBuffer; // 元のバッファをそのまま使用
             processedSizeKB = originalSizeKB; // サイズは変わらない
-            baseMessage = `生成されました（圧縮・リサイズなし）。`;
+            baseMessage = `generated (uncompressed)`;
           } else {
             // 既存の圧縮・リサイズ処理
             const compressionOptions: CompressionOptions = {
@@ -310,9 +310,9 @@ export const generateImageTool = {
             finalExtension = extension;
             processedSizeKB = (finalImageBuffer.length / 1024).toFixed(2);
 
-            baseMessage = `生成され、圧縮されました。`;
+            baseMessage = `generated and compressed`;
             if (force_jpeg_conversion && imageMimeType === MIME_TYPES.PNG) {
-              baseMessage = `生成され、JPEGに変換後圧縮されました。`;
+              baseMessage = `converted to JPEG and compressed`;
             }
           }
           const outputPath = await getUniqueFilePath(output_directory, file_name, finalExtension);
@@ -320,33 +320,33 @@ export const generateImageTool = {
           return {
             content: [
               {
-                type: "text", // 最終的なメッセージを構築
-                text: `画像が ${outputPath} に${baseMessage}\n元のサイズ: ${originalSizeKB}KB, 処理後のサイズ: ${processedSizeKB}KB`
+                type: "text",
+                text: `Image successfully ${baseMessage} at ${outputPath}.\nOriginal size: ${originalSizeKB}KB, Final size: ${processedSizeKB}KB`
               }
             ]
           };
         } else {
           const detail = response.candidates[0]?.content?.parts?.map(p => p.text || p.inlineData?.mimeType || 'unknown_part').join(', ');
-          throw new Error(`レスポンスから有効な画像データが見つかりませんでした。受け取ったパーツ: [${detail || 'なし'}]`);
+          throw new Error(`No valid image data found in the response. Received parts: [${detail || 'none'}]`);
         }
       } else {
-        let errorMessage = '画像が生成されませんでした。レスポンスが空か、予期しない形式である可能性があります。';
-        if (response.promptFeedback) { // promptFeedbackはレスポンスのトップレベルにある
-          errorMessage += `\n[フィードバック] ${JSON.stringify(response.promptFeedback, null, 2)}`;
+        let errorMessage = 'Image generation failed. The response may be empty or in an unexpected format.';
+        if (response.promptFeedback) { // promptFeedback is at the top level of the response
+          errorMessage += `\n[Feedback] ${JSON.stringify(response.promptFeedback, null, 2)}`;
         }
         const candidate = response.candidates?.[0];
         if (candidate?.finishReason) {
-          errorMessage += `\n[終了理由] ${candidate.finishReason}`;
+          errorMessage += `\n[Finish Reason] ${candidate.finishReason}`;
         }
         if (candidate?.safetyRatings) {
-          errorMessage += `\n[セーフティ評価] ${JSON.stringify(candidate.safetyRatings, null, 2)}`;
+          errorMessage += `\n[Safety Ratings] ${JSON.stringify(candidate.safetyRatings, null, 2)}`;
         }
         throw new Error(errorMessage);
       }
     } catch (error: any) {
       console.error('画像生成エラー:', error);
       return {
-        content: [{ type: "text", text: `画像生成中にエラーが発生しました: ${error.message}` }]
+        content: [{ type: "text", text: `An error occurred during image generation: ${error.message}` }]
       };
     }
   }
