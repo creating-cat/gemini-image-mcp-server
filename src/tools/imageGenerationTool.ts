@@ -27,6 +27,18 @@ const JPEG_QUALITY = 70;
 const PNG_COMPRESSION_LEVEL = 9;
 const OPTIPNG_OPTIMIZATION_LEVEL = 2;
 
+// MIMEタイプと拡張子の定数
+const MIME_TYPES = {
+  PNG: 'image/png',
+  JPEG: 'image/jpeg',
+  WEBP: 'image/webp',
+  OCTET_STREAM: 'application/octet-stream',
+};
+const EXTENSIONS = {
+  JPG: 'jpg',
+  PNG: 'png',
+};
+
 // 入力画像がある場合のプロンプトテンプレート
 const ASSISTANT_PROMPT_TEMPLATE_WITH_IMAGES = `You are a professional image generation AI. Follow the steps below to generate the best possible image.
 
@@ -103,18 +115,14 @@ async function getUniqueFilePath(directory: string, baseName: string, extension:
 // 画像処理と圧縮を行うヘルパー関数
 async function processAndCompressImage(
   imageBuffer: Buffer,
-  originalFormat: string | undefined,
+  originalFormat: string | undefined, // sharpから取得したフォーマット名 (e.g., 'jpeg', 'png')
   forceJpeg: boolean,
   targetImageMaxSize: number
-): Promise<{ processedBuffer: Buffer; extension: 'jpg' | 'png' }> {
-  let processedImageBuffer: Buffer;
-  let extension: 'jpg' | 'png';
+): Promise<{ processedBuffer: Buffer; extension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG }> {
+  const sharpInstance = sharp(imageBuffer).resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' });
 
-  if (forceJpeg || originalFormat?.toLowerCase() === 'jpeg' || originalFormat?.toLowerCase() === 'jpg') {
-    extension = 'jpg';
-    // sharpでJPEGに変換・リサイズ (forceJpegがtrueの場合、元がPNGでもここにくる)
-    const resizedJpegBuffer = await sharp(imageBuffer)
-      .resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' })
+  if (forceJpeg || originalFormat === 'jpeg') {
+    const resizedJpegBuffer = await sharpInstance
       .jpeg({
         quality: JPEG_QUALITY,
         progressive: true,
@@ -122,30 +130,30 @@ async function processAndCompressImage(
       })
       .toBuffer();
 
-    // imageminMozjpegで圧縮
-    processedImageBuffer = Buffer.from(await imagemin.buffer(resizedJpegBuffer, {
+    const compressedData = await imagemin.buffer(resizedJpegBuffer, {
       plugins: [
         imageminMozjpeg({
           quality: JPEG_QUALITY,
           progressive: true
         })
       ]
-    }));
-  } else { // forceJpegがfalseで、かつ元がPNG (またはその他でJPEGではない) の場合
-    extension = 'png';
-    // sharpでPNGにリサイズ・圧縮
-    const resizedPngBuffer = await sharp(imageBuffer)
-      .resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' })
+    });
+    const processedBuffer = Buffer.from(compressedData);
+    return { processedBuffer, extension: EXTENSIONS.JPG };
+  } else {
+    // forceJpegがfalseで、かつ元がPNG (またはその他でJPEGではない) の場合、PNGとして処理
+    const resizedPngBuffer = await sharpInstance
       .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
       .toBuffer();
 
-    processedImageBuffer = Buffer.from(await imagemin.buffer(resizedPngBuffer, {
+    const compressedData = await imagemin.buffer(resizedPngBuffer, {
       plugins: [
         imageminOptipng({ optimizationLevel: OPTIPNG_OPTIMIZATION_LEVEL })
       ]
-    }));
+    });
+    const processedBuffer = Buffer.from(compressedData);
+    return { processedBuffer, extension: EXTENSIONS.PNG };
   }
-  return { processedBuffer: processedImageBuffer, extension };
 }
 
 export const generateImageTool = {
@@ -165,18 +173,17 @@ export const generateImageTool = {
               console.log(`Processing image file: ${filePath}`);
               const fileBuffer = await readFile(filePath);
               const base64Data = fileBuffer.toString('base64');
-              const extension = path.extname(filePath).toLowerCase();
-              let resolvedMimeType = 'application/octet-stream'; // デフォルト
+              const extension = path.extname(filePath).toLowerCase().substring(1);
 
-              if (extension === '.png') {
-                resolvedMimeType = 'image/png';
-              } else if (extension === '.jpg' || extension === '.jpeg') {
-                resolvedMimeType = 'image/jpeg';
-              } else if (extension === '.webp') {
-                resolvedMimeType = 'image/webp';
-              }
-              // 必要に応じて他の画像形式（例: image/gif, image/heic, image/heif）も追加
+              const mimeTypeMap: { [key: string]: string } = {
+                'png': MIME_TYPES.PNG,
+                'jpg': MIME_TYPES.JPEG,
+                'jpeg': MIME_TYPES.JPEG,
+                'webp': MIME_TYPES.WEBP,
+              };
 
+              const resolvedMimeType = mimeTypeMap[extension] || MIME_TYPES.OCTET_STREAM;
+              
               console.log(`File ${filePath} processed. MimeType: ${resolvedMimeType}`);
               return {
                 inlineData: {
@@ -255,7 +262,7 @@ export const generateImageTool = {
 
           let message = `画像が ${outputPath} に生成され、圧縮されました。`;
           // force_jpeg_conversionがtrueで、かつ元のAPIレスポンスのMIMEタイプがPNGだった場合にメッセージを変更
-          if (force_jpeg_conversion && imageMimeType === 'image/png') {
+          if (force_jpeg_conversion && imageMimeType === MIME_TYPES.PNG) {
             message = `画像が ${outputPath} に生成され、JPEGに変換後圧縮されました。`;
           }
           
@@ -273,10 +280,16 @@ export const generateImageTool = {
         }
       } else {
         let errorMessage = '画像が生成されませんでした。レスポンスが空か、予期しない形式である可能性があります。';
-        if (response.promptFeedback) {
-          errorMessage += ` プロンプトフィードバック: ${JSON.stringify(response.promptFeedback)}`;
+        if (response.promptFeedback) { // promptFeedbackはレスポンスのトップレベルにある
+          errorMessage += `\n[フィードバック] ${JSON.stringify(response.promptFeedback, null, 2)}`;
         }
-        // response.candidates[0]?.finishReason や safetyRatings もログやエラーメッセージに含めると有益です。
+        const candidate = response.candidates?.[0];
+        if (candidate?.finishReason) {
+          errorMessage += `\n[終了理由] ${candidate.finishReason}`;
+        }
+        if (candidate?.safetyRatings) {
+          errorMessage += `\n[セーフティ評価] ${JSON.stringify(candidate.safetyRatings, null, 2)}`;
+        }
         throw new Error(errorMessage);
       }
     } catch (error: any) {
