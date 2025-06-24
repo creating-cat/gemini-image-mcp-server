@@ -23,9 +23,11 @@ const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 const DEFAULT_OUTPUT_DIRECTORY = 'output/images';
 const DEFAULT_FILE_NAME = 'generated_image';
 const DEFAULT_TARGET_IMAGE_MAX_SIZE = 512;
-const JPEG_QUALITY = 80;
-const PNG_COMPRESSION_LEVEL = 9;
-const OPTIPNG_OPTIMIZATION_LEVEL = 2;
+
+// 圧縮パラメータのデフォルト値
+const DEFAULT_JPEG_QUALITY = 80;
+const DEFAULT_PNG_COMPRESSION_LEVEL = 9;
+const DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL = 2;
 
 // MIMEタイプと拡張子の定数
 const MIME_TYPES = {
@@ -88,6 +90,9 @@ export const generateImageInputSchema = z.object({
   force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。"),
   target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。デフォルトは ${DEFAULT_TARGET_IMAGE_MAX_SIZE}。`),
   skip_compression_and_resizing: z.boolean().optional().default(false).describe("生成された画像の圧縮とリサイズをスキップするかどうか。trueの場合、force_jpeg_conversionとtarget_image_max_sizeは無視されます。デフォルトはfalse。"),
+  jpeg_quality: z.number().int().min(0).max(100).optional().default(DEFAULT_JPEG_QUALITY).describe(`JPEGの品質（0-100）。数値が低いほど圧縮率が高くなります。デフォルトは ${DEFAULT_JPEG_QUALITY}。`),
+  png_compression_level: z.number().int().min(0).max(9).optional().default(DEFAULT_PNG_COMPRESSION_LEVEL).describe(`PNGの圧縮レベル（0-9）。数値が高いほど圧縮率が高くなります。デフォルトは ${DEFAULT_PNG_COMPRESSION_LEVEL}。`),
+  optipng_optimization_level: z.number().int().min(0).max(7).optional().default(DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL).describe(`OptiPNGの最適化レベル（0-7）。数値が高いほど圧縮率が高くなります。デフォルトは ${DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL}。`),
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -113,19 +118,27 @@ async function getUniqueFilePath(directory: string, baseName: string, extension:
   return outputPath;
 }
 
+// 圧縮オプションの型定義
+interface CompressionOptions {
+  jpegQuality: number;
+  pngCompressionLevel: number;
+  optipngOptimizationLevel: number;
+}
+
 // 画像処理と圧縮を行うヘルパー関数
 async function processAndCompressImage(
   imageBuffer: Buffer,
   originalFormat: string | undefined, // sharpから取得したフォーマット名 (e.g., 'jpeg', 'png')
   forceJpeg: boolean,
-  targetImageMaxSize: number
+  targetImageMaxSize: number,
+  options: CompressionOptions
 ): Promise<{ processedBuffer: Buffer; extension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG }> {
   const sharpInstance = sharp(imageBuffer).resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' });
 
   if (forceJpeg || originalFormat === 'jpeg') {
     const resizedJpegBuffer = await sharpInstance
       .jpeg({
-        quality: JPEG_QUALITY,
+        quality: options.jpegQuality,
         progressive: true,
         mozjpeg: true
       })
@@ -134,7 +147,7 @@ async function processAndCompressImage(
     const compressedData = await imagemin.buffer(resizedJpegBuffer, {
       plugins: [
         imageminMozjpeg({
-          quality: JPEG_QUALITY,
+          quality: options.jpegQuality,
           progressive: true
         })
       ]
@@ -144,12 +157,12 @@ async function processAndCompressImage(
   } else {
     // forceJpegがfalseで、かつ元がPNG (またはその他でJPEGではない) の場合、PNGとして処理
     const resizedPngBuffer = await sharpInstance
-      .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
+      .png({ compressionLevel: options.pngCompressionLevel })
       .toBuffer();
 
     const compressedData = await imagemin.buffer(resizedPngBuffer, {
       plugins: [
-        imageminOptipng({ optimizationLevel: OPTIPNG_OPTIMIZATION_LEVEL })
+        imageminOptipng({ optimizationLevel: options.optipngOptimizationLevel })
       ]
     });
     const processedBuffer = Buffer.from(compressedData);
@@ -163,7 +176,18 @@ export const generateImageTool = {
   input_schema: generateImageInputSchema,
   execute: async (args: z.infer<typeof generateImageInputSchema>) => { // skip_compression_and_resizing を追加
     try {
-      const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size } = args;
+      const {
+        prompt,
+        output_directory,
+        file_name,
+        input_image_paths,
+        use_enhanced_prompt,
+        force_jpeg_conversion,
+        target_image_max_size,
+        jpeg_quality,
+        png_compression_level,
+        optipng_optimization_level
+      } = args;
 
       let imageParts: InlineDataPart[] = [];
       if (input_image_paths && input_image_paths.length > 0) {
@@ -276,7 +300,12 @@ export const generateImageTool = {
             baseMessage = `生成されました（圧縮・リサイズなし）。`;
           } else {
             // 既存の圧縮・リサイズ処理
-            const { processedBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size);
+            const compressionOptions: CompressionOptions = {
+              jpegQuality: jpeg_quality,
+              pngCompressionLevel: png_compression_level,
+              optipngOptimizationLevel: optipng_optimization_level,
+            };
+            const { processedBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size, compressionOptions);
             finalImageBuffer = processedBuffer;
             finalExtension = extension;
             processedSizeKB = (finalImageBuffer.length / 1024).toFixed(2);
