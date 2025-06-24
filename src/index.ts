@@ -7,8 +7,8 @@ dotenv.config(); // .env ファイルから環境変数をロード
 
 const server = new McpServer({
   name: 'gemini-image-generation-mcp',
-  version: "0.0.1", // バージョンを追加
-  description: 'Gemini API を使用して画像を生成し、指定したディレクトリに保存するMCPサーバー',
+  version: "0.0.1",
+  description: 'An MCP server that uses the Gemini API to generate images and save them to a specified directory.',
 });
 
 // ツールを登録
@@ -24,8 +24,8 @@ server.tool(generateImageTool.name, generateImageTool.description, generateImage
       content: [{ type: "text", text: res.content[0].text }]
     };
   }
-  // 予期しないレスポンスの場合のフォールバック
-  return { content: [{ type: "text", text: "処理が完了しましたが、予期しない応答がありました。" }] };
+  // Fallback for unexpected responses
+  return { content: [{ type: "text", text: "Processing completed, but an unexpected response was received." }] };
 });
 
 // 標準入出力でメッセージの受信と送信を開始
