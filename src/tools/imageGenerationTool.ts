@@ -23,7 +23,7 @@ const IMAGE_GENERATION_MODEL = 'gemini-2.0-flash-preview-image-generation';
 const DEFAULT_OUTPUT_DIRECTORY = 'output/images';
 const DEFAULT_FILE_NAME = 'generated_image';
 const DEFAULT_TARGET_IMAGE_MAX_SIZE = 512;
-const JPEG_QUALITY = 70;
+const JPEG_QUALITY = 80;
 const PNG_COMPRESSION_LEVEL = 9;
 const OPTIPNG_OPTIMIZATION_LEVEL = 2;
 
@@ -86,7 +86,8 @@ export const generateImageInputSchema = z.object({
   input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。"),
   use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。"),
   force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。"),
-  target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。デフォルトは ${DEFAULT_TARGET_IMAGE_MAX_SIZE}。`)
+  target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。デフォルトは ${DEFAULT_TARGET_IMAGE_MAX_SIZE}。`),
+  skip_compression_and_resizing: z.boolean().optional().default(false).describe("生成された画像の圧縮とリサイズをスキップするかどうか。trueの場合、force_jpeg_conversionとtarget_image_max_sizeは無視されます。デフォルトはfalse。"),
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
@@ -160,7 +161,7 @@ export const generateImageTool = {
   name: 'generate_image',
   description: 'プロンプトに基づいて画像を生成し、指定されたパスに保存します。',
   input_schema: generateImageInputSchema,
-  execute: async (args: z.infer<typeof generateImageInputSchema>) => {
+  execute: async (args: z.infer<typeof generateImageInputSchema>) => { // skip_compression_and_resizing を追加
     try {
       const { prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size } = args;
 
@@ -251,26 +252,47 @@ export const generateImageTool = {
         if (imageData && imageMimeType) { // imageMimeTypeもチェック対象に加える
           const imageBuffer = Buffer.from(imageData, 'base64');
           const meta = await sharp(imageBuffer).metadata();
-
-          const { processedBuffer: processedImageBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size);
-
-          const outputPath = await getUniqueFilePath(output_directory, file_name, extension);
-          await writeFile(outputPath, processedImageBuffer);
           
           const originalSizeKB = (imageBuffer.length / 1024).toFixed(2);
-          const compressedSizeKB = (processedImageBuffer.length / 1024).toFixed(2);
 
-          let message = `画像が ${outputPath} に生成され、圧縮されました。`;
-          // force_jpeg_conversionがtrueで、かつ元のAPIレスポンスのMIMEタイプがPNGだった場合にメッセージを変更
-          if (force_jpeg_conversion && imageMimeType === MIME_TYPES.PNG) {
-            message = `画像が ${outputPath} に生成され、JPEGに変換後圧縮されました。`;
+          let finalImageBuffer: Buffer;
+          let finalExtension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG;
+          let processedSizeKB: string;
+          let baseMessage: string; // Pathを含まないメッセージ部分
+
+          if (args.skip_compression_and_resizing) {
+            // 圧縮とリサイズをスキップする場合
+            if (imageMimeType === MIME_TYPES.PNG) {
+              finalExtension = EXTENSIONS.PNG;
+            } else if (imageMimeType === MIME_TYPES.JPEG) {
+              finalExtension = EXTENSIONS.JPG;
+            } else {
+              // 予期しないMIMEタイプの場合のフォールバック
+              console.warn(`Unexpected image MIME type received: ${imageMimeType}. Defaulting to JPG extension.`);
+              finalExtension = EXTENSIONS.JPG;
+            }
+            finalImageBuffer = imageBuffer; // 元のバッファをそのまま使用
+            processedSizeKB = originalSizeKB; // サイズは変わらない
+            baseMessage = `生成されました（圧縮・リサイズなし）。`;
+          } else {
+            // 既存の圧縮・リサイズ処理
+            const { processedBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size);
+            finalImageBuffer = processedBuffer;
+            finalExtension = extension;
+            processedSizeKB = (finalImageBuffer.length / 1024).toFixed(2);
+
+            baseMessage = `生成され、圧縮されました。`;
+            if (force_jpeg_conversion && imageMimeType === MIME_TYPES.PNG) {
+              baseMessage = `生成され、JPEGに変換後圧縮されました。`;
+            }
           }
-          
+          const outputPath = await getUniqueFilePath(output_directory, file_name, finalExtension);
+          await writeFile(outputPath, finalImageBuffer);
           return {
             content: [
               {
-                type: "text",
-                text: `${message}\n元のサイズ: ${originalSizeKB}KB, 圧縮後のサイズ: ${compressedSizeKB}KB`
+                type: "text", // 最終的なメッセージを構築
+                text: `画像が ${outputPath} に${baseMessage}\n元のサイズ: ${originalSizeKB}KB, 処理後のサイズ: ${processedSizeKB}KB`
               }
             ]
           };

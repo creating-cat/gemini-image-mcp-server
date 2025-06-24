@@ -13,12 +13,19 @@ const server = new McpServer({
 
 // ツールを登録
 // server.tool(generateImageTool.name, generateImageTool.input_schema.shape, generateImageTool.execute);
-server.tool(generateImageTool.name, generateImageTool.input_schema.shape,
-async ({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size }) => { // use_enhanced_prompt を追加
-  let res = await generateImageTool.execute({ prompt, output_directory, file_name, input_image_paths, use_enhanced_prompt, force_jpeg_conversion, target_image_max_size }) // use_enhanced_prompt を渡す
-  return {
-    content: [{ type: "text", text: res.content[0].text }]
-  };
+server.tool(generateImageTool.name, generateImageTool.description, generateImageTool.input_schema.shape, async (args) => {
+  // ツール実行時に渡される引数オブジェクト(args)をそのままexecute関数に渡すことで、
+  // 今後ツールに新しい引数を追加した際にこのファイルを変更する必要がなくなります。
+  const res = await generateImageTool.execute(args);
+
+  // executeからの戻り値がエラーメッセージの場合も考慮し、安全にtextプロパティにアクセスします。
+  if (res && res.content && res.content.length > 0 && res.content[0].text) {
+    return {
+      content: [{ type: "text", text: res.content[0].text }]
+    };
+  }
+  // 予期しないレスポンスの場合のフォールバック
+  return { content: [{ type: "text", text: "処理が完了しましたが、予期しない応答がありました。" }] };
 });
 
 // 標準入出力でメッセージの受信と送信を開始
