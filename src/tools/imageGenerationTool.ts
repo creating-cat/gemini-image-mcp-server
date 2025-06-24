@@ -82,17 +82,17 @@ export interface InlineDataPart {
 
 // ツールの入力スキーマをzodで定義
 export const generateImageInputSchema = z.object({
-  prompt: z.string().describe('画像を生成するためのテキストプロンプト。入力画像がある場合は、それらをどのように利用して新しい画像を生成してほしいか指示に含めてください。プロンプトは英語推奨'),
-  output_directory: z.string().default(DEFAULT_OUTPUT_DIRECTORY).describe(`画像を保存するディレクトリのパス。デフォルトは '${DEFAULT_OUTPUT_DIRECTORY}'。`),
-  file_name: z.string().default(DEFAULT_FILE_NAME).describe(`保存する画像ファイルの名前（拡張子なし）。デフォルトは '${DEFAULT_FILE_NAME}'。`),
-  input_image_paths: z.array(z.string().describe("画像ファイルの絶対パス。")).optional().describe("任意。画像生成の参考にする入力画像のファイルパスのリスト。"),
-  use_enhanced_prompt: z.boolean().default(true).describe("AIへの指示を補助する強化プロンプトを使用するかどうか。デフォルトはtrue。"),
-  force_jpeg_conversion: z.boolean().optional().default(false).describe("PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。デフォルトはfalse。"),
-  target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。デフォルトは ${DEFAULT_TARGET_IMAGE_MAX_SIZE}。`),
-  skip_compression_and_resizing: z.boolean().optional().default(false).describe("生成された画像の圧縮とリサイズをスキップするかどうか。trueの場合、force_jpeg_conversionとtarget_image_max_sizeは無視されます。デフォルトはfalse。"),
-  jpeg_quality: z.number().int().min(0).max(100).optional().default(DEFAULT_JPEG_QUALITY).describe(`JPEGの品質（0-100）。数値が低いほど圧縮率が高くなります。デフォルトは ${DEFAULT_JPEG_QUALITY}。`),
-  png_compression_level: z.number().int().min(0).max(9).optional().default(DEFAULT_PNG_COMPRESSION_LEVEL).describe(`PNGの圧縮レベル（0-9）。数値が高いほど圧縮率が高くなります。デフォルトは ${DEFAULT_PNG_COMPRESSION_LEVEL}。`),
-  optipng_optimization_level: z.number().int().min(0).max(7).optional().default(DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL).describe(`OptiPNGの最適化レベル（0-7）。数値が高いほど圧縮率が高くなります。デフォルトは ${DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL}。`),
+  prompt: z.string().describe('Text prompt for image generation. If input images are provided, include instructions on how to use them to create the new image. English is recommended.'),
+  output_directory: z.string().default(DEFAULT_OUTPUT_DIRECTORY).describe(`The directory path to save the image. Defaults to '${DEFAULT_OUTPUT_DIRECTORY}'.`),
+  file_name: z.string().default(DEFAULT_FILE_NAME).describe(`The name of the image file to be saved (without extension). Defaults to '${DEFAULT_FILE_NAME}'.`),
+  input_image_paths: z.array(z.string().describe("Absolute path of the image file.")).optional().describe("Optional. A list of file paths for input images to be used as a reference for generation."),
+  use_enhanced_prompt: z.boolean().default(true).describe("Whether to use an enhanced prompt to assist the AI's instructions. Defaults to true."),
+  force_jpeg_conversion: z.boolean().optional().default(false).describe("Whether to convert the image to JPEG for compression even if it was generated as a PNG. Enabling this will lose transparency information but can be expected to reduce file size. Defaults to false."),
+  target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`The maximum length (in pixels) of the longest side of the resized image. The original aspect ratio is maintained. Defaults to ${DEFAULT_TARGET_IMAGE_MAX_SIZE}.`),
+  skip_compression_and_resizing: z.boolean().optional().default(false).describe("Whether to skip compression and resizing of the generated image. If true, `force_jpeg_conversion` and `target_image_max_size` are ignored. Defaults to false."),
+  jpeg_quality: z.number().int().min(0).max(100).optional().default(DEFAULT_JPEG_QUALITY).describe(`JPEG quality (0-100). Lower values result in higher compression. Defaults to ${DEFAULT_JPEG_QUALITY}.`),
+  png_compression_level: z.number().int().min(0).max(9).optional().default(DEFAULT_PNG_COMPRESSION_LEVEL).describe(`PNG compression level (0-9). Higher values result in higher compression. Defaults to ${DEFAULT_PNG_COMPRESSION_LEVEL}.`),
+  optipng_optimization_level: z.number().int().min(0).max(7).optional().default(DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL).describe(`OptiPNG optimization level (0-7). Higher values result in higher compression. Defaults to ${DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL}.`),
 });
 
 // ファイル名が重複しないようにユニークなパスを生成するヘルパー関数
