@@ -25,31 +25,16 @@
 ---
 ## セットアップ
 
-1.  **リポジトリのクローン:**
-    ```bash
-    git clone https://github.com/creating-cat/gemini-image-mcp-server.git
-    cd gemini-image-mcp-server
-    ```
-
-2.  **依存関係のインストール:**
-    ```bash
-    npm install
-    ```
-
-3. **コードのビルド**
-    ```bash
-    npm run build
-    ```
-
 ### Roo Codeの場合のMCPサーバー設定例
 
 ```json
 {
   "mcpServers": {
     "gemini-image-mcp-server": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/path/to/gemini-image-mcp-server/dist/index.js"
+        "-y",
+        "@creating-cat/gemini-image-mcp-server"
       ],
       "env": {
         "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY"

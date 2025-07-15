@@ -28,34 +28,16 @@ Generated images are automatically compressed to reduce file size.
 
 ## Setup
 
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/creating-cat/gemini-image-mcp-server.git
-   cd gemini-image-mcp-server
-   ```
-
-2. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-3. **Build the code:**
-
-   ```bash
-   npm run build
-   ```
-
 ### Example MCP server configuration for Roo Code
 
 ```json
 {
   "mcpServers": {
     "gemini-image-mcp-server": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/path/to/gemini-image-mcp-server/dist/index.js"
+        "-y",
+        "@creating-cat/gemini-image-mcp-server"
       ],
       "env": {
         "GEMINI_API_KEY": "YOUR_GEMINI_API_KEY"
