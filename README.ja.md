@@ -78,10 +78,11 @@
 | `file_name`                       | (string, 任意) 保存する画像ファイルの名前（拡張子なし）。                                                                                                          | `generated_image` |
 | `input_image_paths`               | (string[], 任意) 画像生成の参考にする入力画像のファイルパスのリスト。                                                                                                | `[]` (空の配列)   |
 | `use_enhanced_prompt`             | (boolean, 任意) AIへの指示を補助する強化プロンプトを使用するかどうか。                                                                                             | `true`            |
-| `force_jpeg_conversion`           | (boolean, 任意) PNGで生成された場合でもJPEGに変換して圧縮するかどうか。有効にすると透明情報は失われ、ファイルサイズ削減が期待できます。                                   | `false`           |
 | `target_image_max_size`           | (number, 任意) リサイズ後の画像の最大辺の長さ（ピクセル）。元のアスペクト比を維持します。                                                                            | `512`             |
-| `skip_compression_and_resizing`   | (boolean, 任意) 生成された画像の圧縮とリサイズをスキップするかどうか。`true`の場合、`force_jpeg_conversion`と`target_image_max_size`は無視されます。                   | `false`           |
+| `force_conversion_type`           | (string, 任意) 特定のフォーマット（'jpeg', 'webp', 'png'）への変換を強制します。指定しない場合、元のフォーマットが処理されます（JPEG以外はPNGとして扱われます）。 | なし              |
+| `skip_compression_and_resizing`   | (boolean, 任意) 生成された画像の圧縮とリサイズをスキップするかどうか。`true`の場合、`force_conversion_type`と`target_image_max_size`は無視されます。                   | `false`           |
 | `jpeg_quality`                    | (number, 任意) JPEGの品質（0-100）。数値が低いほど圧縮率が高くなります。                                                                                             | `80`              |
+| `webp_quality`                    | (number, 任意) WebPの品質（0-100）。数値が低いほど圧縮率が高くなります。                                                                                             | `80`              |
 | `png_compression_level`           | (number, 任意) PNGの圧縮レベル（0-9）。数値が高いほど圧縮率が高くなります。                                                                                        | `9`               |
 | `optipng_optimization_level`      | (number, 任意) OptiPNGの最適化レベル（0-7）。数値が高いほど圧縮率が高くなります。                                                                                    | `2`               |
 

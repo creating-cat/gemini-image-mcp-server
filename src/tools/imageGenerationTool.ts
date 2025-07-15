@@ -7,6 +7,7 @@ import sharp from 'sharp'; // sharpをインポート
 import imagemin from 'imagemin'; // imagemin のインポートは imagemin-optipng の前に配置することが推奨される場合があります
 import imageminOptipng from 'imagemin-optipng'; // imagemin-pngquant から imagemin-optipng に変更
 import imageminMozjpeg from 'imagemin-mozjpeg';
+import imageminWebp from 'imagemin-webp';
 
 dotenv.config(); // .env ファイルから環境変数をロード
 
@@ -26,6 +27,7 @@ const DEFAULT_TARGET_IMAGE_MAX_SIZE = 512;
 
 // 圧縮パラメータのデフォルト値
 const DEFAULT_JPEG_QUALITY = 80;
+const DEFAULT_WEBP_QUALITY = 80;
 const DEFAULT_PNG_COMPRESSION_LEVEL = 9;
 const DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL = 2;
 
@@ -39,6 +41,7 @@ const MIME_TYPES = {
 const EXTENSIONS = {
   JPG: 'jpg',
   PNG: 'png',
+  WEBP: 'webp',
 };
 
 // 入力画像がある場合のプロンプトテンプレート
@@ -87,10 +90,11 @@ export const generateImageInputSchema = z.object({
   file_name: z.string().default(DEFAULT_FILE_NAME).describe(`The name of the image file to be saved (without extension). Defaults to '${DEFAULT_FILE_NAME}'.`),
   input_image_paths: z.array(z.string().describe("Absolute path of the image file.")).optional().describe("Optional. A list of file paths for input images to be used as a reference for generation."),
   use_enhanced_prompt: z.boolean().default(true).describe("Whether to use an enhanced prompt to assist the AI's instructions. Defaults to true."),
-  force_jpeg_conversion: z.boolean().optional().default(false).describe("Whether to convert the image to JPEG for compression even if it was generated as a PNG. Enabling this will lose transparency information but can be expected to reduce file size. Defaults to false."),
   target_image_max_size: z.number().int().positive().optional().default(DEFAULT_TARGET_IMAGE_MAX_SIZE).describe(`The maximum length (in pixels) of the longest side of the resized image. The original aspect ratio is maintained. Defaults to ${DEFAULT_TARGET_IMAGE_MAX_SIZE}.`),
-  skip_compression_and_resizing: z.boolean().optional().default(false).describe("Whether to skip compression and resizing of the generated image. If true, `force_jpeg_conversion` and `target_image_max_size` are ignored. Defaults to false."),
+  force_conversion_type: z.enum(['jpeg', 'webp', 'png']).optional().describe("Optionally force conversion to a specific format ('jpeg', 'webp', 'png'). If not specified, the original format will be processed, defaulting to PNG for non-JPEG images."),
+  skip_compression_and_resizing: z.boolean().optional().default(false).describe("Whether to skip compression and resizing of the generated image. If true, `force_conversion_type` and `target_image_max_size` are ignored. Defaults to false."),
   jpeg_quality: z.number().int().min(0).max(100).optional().default(DEFAULT_JPEG_QUALITY).describe(`JPEG quality (0-100). Lower values result in higher compression. Defaults to ${DEFAULT_JPEG_QUALITY}.`),
+  webp_quality: z.number().int().min(0).max(100).optional().default(DEFAULT_WEBP_QUALITY).describe(`WebP quality (0-100). Lower values result in higher compression. Defaults to ${DEFAULT_WEBP_QUALITY}.`),
   png_compression_level: z.number().int().min(0).max(9).optional().default(DEFAULT_PNG_COMPRESSION_LEVEL).describe(`PNG compression level (0-9). Higher values result in higher compression. Defaults to ${DEFAULT_PNG_COMPRESSION_LEVEL}.`),
   optipng_optimization_level: z.number().int().min(0).max(7).optional().default(DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL).describe(`OptiPNG optimization level (0-7). Higher values result in higher compression. Defaults to ${DEFAULT_OPTIPNG_OPTIMIZATION_LEVEL}.`),
 });
@@ -121,6 +125,7 @@ async function getUniqueFilePath(directory: string, baseName: string, extension:
 // 圧縮オプションの型定義
 interface CompressionOptions {
   jpegQuality: number;
+  webpQuality: number;
   pngCompressionLevel: number;
   optipngOptimizationLevel: number;
 }
@@ -129,13 +134,16 @@ interface CompressionOptions {
 async function processAndCompressImage(
   imageBuffer: Buffer,
   originalFormat: string | undefined, // sharpから取得したフォーマット名 (e.g., 'jpeg', 'png')
-  forceJpeg: boolean,
+  conversionType: 'jpeg' | 'webp' | 'png' | undefined,
   targetImageMaxSize: number,
   options: CompressionOptions
-): Promise<{ processedBuffer: Buffer; extension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG }> {
+): Promise<{ processedBuffer: Buffer; extension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG | typeof EXTENSIONS.WEBP }> {
   const sharpInstance = sharp(imageBuffer).resize(targetImageMaxSize, targetImageMaxSize, { fit: 'inside' });
 
-  if (forceJpeg || originalFormat === 'jpeg') {
+  // 最終的な処理フォーマットを決定。指定があればそれを使い、なければ元のフォーマットを維持（JPEG以外はPNG扱い）
+  const targetFormat = conversionType || (originalFormat === 'jpeg' ? 'jpeg' : 'png');
+
+  if (targetFormat === 'jpeg') {
     const resizedJpegBuffer = await sharpInstance
       .jpeg({
         quality: options.jpegQuality,
@@ -154,8 +162,24 @@ async function processAndCompressImage(
     });
     const processedBuffer = Buffer.from(compressedData);
     return { processedBuffer, extension: EXTENSIONS.JPG };
-  } else {
-    // forceJpegがfalseで、かつ元がPNG (またはその他でJPEGではない) の場合、PNGとして処理
+  } else if (targetFormat === 'webp') {
+    // sharpでリサイズとWebPへの初期変換
+    const resizedWebpBuffer = await sharpInstance
+      .webp({ quality: options.webpQuality }) // sharpでも品質を指定し、初期変換
+      .toBuffer();
+
+    // imagemin-webpでさらに最適化
+    const compressedData = await imagemin.buffer(resizedWebpBuffer, {
+      plugins: [
+        imageminWebp({
+          quality: options.webpQuality,
+        })
+      ]
+    });
+    const processedBuffer = Buffer.from(compressedData);
+    return { processedBuffer, extension: EXTENSIONS.WEBP };
+  } else { // 'png'
+    // PNGとして処理
     const resizedPngBuffer = await sharpInstance
       .png({ compressionLevel: options.pngCompressionLevel })
       .toBuffer();
@@ -182,8 +206,9 @@ export const generateImageTool = {
         file_name,
         input_image_paths,
         use_enhanced_prompt,
-        force_jpeg_conversion,
         target_image_max_size,
+        force_conversion_type,
+        webp_quality,
         jpeg_quality,
         png_compression_level,
         optipng_optimization_level
@@ -280,7 +305,7 @@ export const generateImageTool = {
           const originalSizeKB = (imageBuffer.length / 1024).toFixed(2);
 
           let finalImageBuffer: Buffer;
-          let finalExtension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG;
+          let finalExtension: typeof EXTENSIONS.JPG | typeof EXTENSIONS.PNG | typeof EXTENSIONS.WEBP;
           let processedSizeKB: string;
           let baseMessage: string; // Pathを含まないメッセージ部分
 
@@ -290,6 +315,8 @@ export const generateImageTool = {
               finalExtension = EXTENSIONS.PNG;
             } else if (imageMimeType === MIME_TYPES.JPEG) {
               finalExtension = EXTENSIONS.JPG;
+            } else if (imageMimeType === MIME_TYPES.WEBP) {
+              finalExtension = EXTENSIONS.WEBP;
             } else {
               // 予期しないMIMEタイプの場合のフォールバック
               console.warn(`Unexpected image MIME type received: ${imageMimeType}. Defaulting to JPG extension.`);
@@ -302,17 +329,20 @@ export const generateImageTool = {
             // 既存の圧縮・リサイズ処理
             const compressionOptions: CompressionOptions = {
               jpegQuality: jpeg_quality,
+              webpQuality: webp_quality,
               pngCompressionLevel: png_compression_level,
               optipngOptimizationLevel: optipng_optimization_level,
             };
-            const { processedBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_jpeg_conversion, target_image_max_size, compressionOptions);
+            const { processedBuffer, extension } = await processAndCompressImage(imageBuffer, meta.format, force_conversion_type, target_image_max_size, compressionOptions);
             finalImageBuffer = processedBuffer;
             finalExtension = extension;
             processedSizeKB = (finalImageBuffer.length / 1024).toFixed(2);
 
             baseMessage = `generated and compressed`;
-            if (force_jpeg_conversion && imageMimeType === MIME_TYPES.PNG) {
-              baseMessage = `converted to JPEG and compressed`;
+            const originalFormat = meta.format === 'jpeg' ? 'jpeg' : 'png'; // Geminiが返すフォーマットを正規化
+            // 元のフォーマットと強制変換のフォーマットが異なる場合のみメッセージを変更
+            if (force_conversion_type && force_conversion_type !== originalFormat) {
+              baseMessage = `converted to ${extension.toUpperCase()} and compressed`;
             }
           }
           const outputPath = await getUniqueFilePath(output_directory, file_name, finalExtension);

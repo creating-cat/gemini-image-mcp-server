@@ -86,10 +86,11 @@ This MCP server provides a tool named `generate_image`.
 | `file_name`                     | (string, optional) Name of the saved image file (without extension).                                                                                                                 | `generated_image`  |
 | `input_image_paths`             | (string\[], optional) List of file paths for input reference images.                                                                                                                 | `[]` (empty array) |
 | `use_enhanced_prompt`           | (boolean, optional) Whether to use enhanced prompts to assist AI instructions.                                                                                                       | `true`             |
-| `force_jpeg_conversion`         | (boolean, optional) Whether to convert generated PNG images to JPEG for compression. If enabled, transparency will be lost, but file size will be reduced.                           | `false`            |
 | `target_image_max_size`         | (number, optional) Maximum size (in pixels) for the longer edge after resizing. The aspect ratio is preserved.                                                                       | `512`              |
-| `skip_compression_and_resizing` | (boolean, optional) Whether to skip compression and resizing of generated images. If `true`, `force_jpeg_conversion` and `target_image_max_size` will be ignored.                    | `false`            |
+| `force_conversion_type`         | (string, optional) Optionally force conversion to a specific format ('jpeg', 'webp', 'png'). If not specified, the original format will be processed, defaulting to PNG for non-JPEG images. | None               |
+| `skip_compression_and_resizing` | (boolean, optional) Whether to skip compression and resizing of generated images. If `true`, `force_conversion_type` and `target_image_max_size` will be ignored.                    | `false`            |
 | `jpeg_quality`                  | (number, optional) JPEG quality (0-100). Lower values result in higher compression.                                                                                                  | `80`               |
+| `webp_quality`                  | (number, optional) WebP quality (0-100). Lower values result in higher compression.                                                                                                  | `80`               |
 | `png_compression_level`         | (number, optional) PNG compression level (0-9). Higher values result in higher compression.                                                                                          | `9`                |
 | `optipng_optimization_level`    | (number, optional) OptiPNG optimization level (0-7). Higher values result in higher compression.                                                                                     | `2`                |
 
@@ -124,4 +125,3 @@ If an error occurs, an error message will be returned.
 ## License
 
 MIT
-
